@@ -1,20 +1,30 @@
 # Nexus Command Globe
 
-Interactive 3D globe for **Nexus Management Solutions LLC**.
+**Turn-key 3D interactive globe** for Nexus Management Solutions LLC.
 
-- Public access — no login required
-- Toggle layers: Hot/Green Leads, Dead/Red Leads, Signed Contracts, Investors/Buyers
-- Beautiful dark neon 3D globe (react-globe.gl)
-- Ready to wire real data from Google Drive folder `1VqxwO_u1sL0IaIm4FHs5gecAsh1IlTZ1`
+Open the link → immediate **Wow** factor. Public. No login required.
 
-## Deploy
+## Features
+- Cinematic 3D night-earth globe with glowing atmosphere
+- Auto-rotate + smooth camera
+- Toggleable layers: Hot Leads (green), Dead Leads (red), Signed Contracts (gold rings), Investors (cyan)
+- Live counts in the glass control panel
+- Hover cards
+- Premium dark neon UI
 
-Push to this repo and Vercel will auto-deploy (or link manually).
+## Deploy in 60 seconds (get your live link)
 
-Live link will be available after first Vercel deployment.
+1. Click this link:  
+   **https://vercel.com/new/import?s=https://github.com/chrisinvestor05/nexus-command-globe**
 
-## Next steps
+2. Connect your GitHub account if prompted (one-time).
 
-- Connect Google Drive API for live leads/buyers/contracts
-- Add search, filters, and detail panels
-- Higgsfield-generated custom marker icons and cinematic overlays
+3. Click **Deploy**.
+
+Your public live link will appear in under a minute.
+
+No environment variables needed for the demo. Drive data can be connected later.
+
+---
+
+Built for Christian P. Younan / Nexus Management Solutions LLC.
