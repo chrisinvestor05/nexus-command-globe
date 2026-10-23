@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Nexus Command</title>
+  <style>
+    :root { color-scheme: dark; --bg:#05070a; --fg:#e7f3ec; --muted:#8ea396; --green:#3dff9a; --gold:#e6c36a; --cyan:#4ad4ff; --dead:#c45c5c; --quiet:#8ea396; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: Manrope, ui-sans-serif, system-ui, sans-serif; }
+    #globe { position: fixed; inset: 0; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    header { position: fixed; top: 0; left: 0; right: 0; z-index: 3; display: flex; gap: 6px; padding: 10px 10px 0; overflow-x: auto; }
+    header button { min-height: 44px; flex: 0 0 auto; border-radius: 999px; padding: 0 12px; color: var(--muted); background: rgba(5,7,10,.55); }
+    header button.on { color: var(--fg); background: #121a17; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: rgba(18,26,23,.88); backdrop-filter: blur(16px); border-radius: 22px 22px 0 0; max-height: 48%; display: flex; flex-direction: column; }
+    .bar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; }
+    .bar button { min-height: 44px; font-weight: 650; }
+    .grow { flex: 1; text-align: right; color: var(--muted); font-size: 12px; }
+    .body { display: none; min-height: 0; padding: 0 12px 14px; overflow: auto; }
+    .sheet.open .body { display: block; }
+    input, select { width: 100%; height: 44px; margin-bottom: 8px; border: 0; border-radius: 12px; background: var(--bg); color: var(--fg); padding: 0 12px; }
+    .row { width: 100%; min-height: 44px; text-align: left; padding: 8px 4px; border-bottom: 1px solid #24302a; }
+    .row b { display: block; font-size: 14px; }
+    .row span { color: var(--muted); font-size: 12px; }
+    #copy { background: #0c1612; border-radius: 12px; padding: 0 12px; }
+    @media (min-width: 800px) {
+      .sheet { top: 76px; bottom: 16px; left: 16px; right: auto; width: 340px; max-height: none; border-radius: 18px; }
+      .sheet .body { display: block; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="globe"></div>
+  <header id="tabs"></header>
+  <aside class="sheet" id="sheet">
+    <div class="bar">
+      <button id="toggle" type="button">List</button>
+      <button id="copy" type="button">Copy AI script</button>
+      <div class="grow" id="asof"></div>
+    </div>
+    <div class="body">
+      <input id="q" placeholder="Search address or city" />
+      <select id="state"><option value="all">All states</option></select>
+      <div id="list"></div>
+    </div>
+  </aside>
+  <script src="https://unpkg.com/globe.gl@2.41.2/dist/globe.gl.min.js"></script>
+  <script>
+    const AS_OF = "22 Oct 2026, 3:22 PM";
+    const TABS = [
+      ["all", "All", ""],
+      ["hot", "Top leads", "#3dff9a"],
+      ["quiet", "No reply", "#8ea396"],
+      ["investor", "Buyers", "#4ad4ff"],
+      ["signed", "Under contract", "#e6c36a"],
+      ["dead", "Cold", "#c45c5c"]
+    ];
+    const COLOR = { hot: "#3dff9a", quiet: "#8ea396", investor: "#4ad4ff", signed: "#e6c36a", dead: "#c45c5c" };
+    let book = [];
+    let tab = "hot";
+    let query = "";
+    let state = "all";
+    const globe = Globe()(document.getElementById("globe"))
+      .backgroundColor("#05070a")
+      .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-night.jpg")
+      .backgroundImageUrl("https://unpkg.com/three-globe/example/img/night-sky.png")
+      .showAtmosphere(true)
+      .atmosphereColor("#3dff9a")
+      .atmosphereAltitude(0.2)
+      .pointLat("lat").pointLng("lng").pointAltitude(0.012)
+      .pointColor(d => COLOR[d.layer] || "#fff")
+      .pointRadius(d => d.layer === "signed" ? 0.32 : d.layer === "hot" ? 0.26 : d.layer === "investor" ? 0.18 : 0.14)
+      .pointLabel(d => `${d.title}<br>${d.city}, ${d.state}`)
+      .ringColor(() => "#e6c36a")
+      .ringMaxRadius(3.2)
+      .ringPropagationSpeed(1.3)
+      .ringRepeatPeriod(1200);
+    globe.pointOfView({ lat: 38.5, lng: -97, altitude: 2.05 });
+    globe.controls().autoRotate = true;
+    globe.controls().autoRotateSpeed = 0.38;
+
+    function scoped() {
+      const n = query.trim().toLowerCase();
+      return book.filter(m => (state === "all" || m.state === state) && (!n || `${m.title} ${m.city} ${m.state} ${m.note} ${m.status} ${m.value}`.toLowerCase().includes(n)));
+    }
+    function visible() {
+      const rows = tab === "all" ? scoped() : scoped().filter(m => m.layer === tab);
+      return rows.slice().sort((a, b) => a.title.localeCompare(b.title));
+    }
+    function paint() {
+      const rows = visible();
+      const counts = { all: scoped().length, hot: 0, dead: 0, signed: 0, investor: 0, quiet: 0 };
+      scoped().forEach(m => counts[m.layer] += 1);
+      document.getElementById("tabs").innerHTML = TABS.map(([id, label, color]) =>
+        `<button type="button" class="${id === tab ? "on" : ""}" data-tab="${id}">${color ? `<i class="dot" style="background:${color}"></i>` : ""}${label} ${counts[id] || 0}</button>`
+      ).join("");
+      document.getElementById("list").innerHTML = rows.slice(0, 400).map(m =>
+        `<button class="row" type="button" data-id="${m.id}"><b>${m.title}</b><span>${m.city}, ${m.state} · ${m.status}</span></button>`
+      ).join("") || `<p style="color:#8ea396">Nothing in this tab.</p>`;
+      globe.pointsData(rows);
+      globe.ringsData(rows.filter(m => m.layer === "signed"));
+      const reach = scoped().filter(m => m.status === "Replied").length;
+      const tops = scoped().filter(m => m.status === "Top lead").length;
+      document.getElementById("copy").textContent = `Copy · ${reach} reach-outs · ${tops} leads`;
+    }
+    function scriptText() {
+      const rows = scoped();
+      const reach = rows.filter(m => m.status === "Replied");
+      const tops = rows.filter(m => m.status === "Top lead");
+      const line = (m, i) => `${i}. ${m.title}, ${m.city}, ${m.state}${m.value && (m.value.startsWith("$") || /score/i.test(m.value)) ? " — " + m.value : ""}${m.note ? " — " + m.note : ""}`;
+      return [
+        "NEXUS ACQUISITIONS SCRIPT",
+        "Book date: " + AS_OF,
+        "You are the acquisitions desk for Nexus Management Solutions.",
+        "Property facts only. Do not invent names, phones, emails, or prices.",
+        "",
+        "REQUEST FOR US TO REACH OUT (" + reach.length + ")",
+        reach.map(line).join("\n") || "(none)",
+        "",
+        "TOP LEADS (" + tops.length + ")",
+        tops.map(line).join("\n") || "(none)"
+      ].join("\n");
+    }
+    document.getElementById("asof").textContent = AS_OF;
+    document.getElementById("tabs").onclick = (e) => {
+      const b = e.target.closest("[data-tab]");
+      if (!b) return;
+      tab = b.dataset.tab;
+      paint();
+    };
+    document.getElementById("list").onclick = (e) => {
+      const b = e.target.closest("[data-id]");
+      if (!b) return;
+      const m = book.find(x => x.id === b.dataset.id);
+      if (!m) return;
+      globe.pointOfView({ lat: m.lat, lng: m.lng, altitude: 0.6 }, 900);
+      globe.controls().autoRotate = false;
+    };
+    document.getElementById("q").oninput = (e) => { query = e.target.value; paint(); };
+    document.getElementById("state").onchange = (e) => { state = e.target.value; paint(); };
+    document.getElementById("toggle").onclick = () => document.getElementById("sheet").classList.toggle("open");
+    document.getElementById("copy").onclick = async () => {
+      const text = scriptText();
+      try { await navigator.clipboard.writeText(text); }
+      catch { const a = document.createElement("textarea"); a.value = text; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+      document.getElementById("copy").textContent = "Copied";
+    };
+    fetch("markers.json").then(r => r.json()).then(data => {
+      book = data;
+      const states = [...new Set(book.map(m => m.state))].sort();
+      document.getElementById("state").insertAdjacentHTML("beforeend", states.map(s => `<option>${s}</option>`).join(""));
+      paint();
+    });
+    addEventListener("resize", () => globe.width(innerWidth).height(innerHeight));
+    globe.width(innerWidth).height(innerHeight);
+  </script>
+</body>
+</html>
