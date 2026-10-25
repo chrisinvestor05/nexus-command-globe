@@ -162,6 +162,7 @@
       const b = e.target.closest("[data-tab]");
       if (!b) return;
       tab = b.dataset.tab;
+      if (tab === "investor") document.getElementById("sheet").classList.add("open");
       paint();
     };
     document.getElementById("books").onclick = (e) => {
