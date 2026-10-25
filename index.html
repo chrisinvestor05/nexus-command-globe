@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Nexus Command</title>
   <style>
-    :root { color-scheme: dark; --bg:#05070a; --fg:#e7f3ec; --muted:#8ea396; --green:#3dff9a; --gold:#e6c36a; --cyan:#4ad4ff; --dead:#c45c5c; --quiet:#8ea396; }
+    :root { color-scheme: dark; --bg:#05070a; --fg:#e7f3ec; --muted:#8ea396; --green:#3dff9a; --gold:#e6c36a; --cyan:#4ad4ff; --dead:#c45c5c; }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: Manrope, ui-sans-serif, system-ui, sans-serif; }
     #globe { position: fixed; inset: 0; }
@@ -14,19 +14,24 @@
     header button { min-height: 44px; flex: 0 0 auto; border-radius: 999px; padding: 0 12px; color: var(--muted); background: rgba(5,7,10,.55); }
     header button.on { color: var(--fg); background: #121a17; }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: rgba(18,26,23,.88); backdrop-filter: blur(16px); border-radius: 22px 22px 0 0; max-height: 48%; display: flex; flex-direction: column; }
-    .bar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; }
+    .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: rgba(18,26,23,.88); backdrop-filter: blur(16px); border-radius: 22px 22px 0 0; max-height: 52%; display: flex; flex-direction: column; }
+    .bar { display: flex; gap: 8px; align-items: center; padding: 10px 12px 0; }
     .bar button { min-height: 44px; font-weight: 650; }
     .grow { flex: 1; text-align: right; color: var(--muted); font-size: 12px; }
-    .body { display: none; min-height: 0; padding: 0 12px 14px; overflow: auto; }
+    .body { display: none; min-height: 0; padding: 8px 12px 14px; overflow: auto; }
     .sheet.open .body { display: block; }
     input, select { width: 100%; height: 44px; margin-bottom: 8px; border: 0; border-radius: 12px; background: var(--bg); color: var(--fg); padding: 0 12px; }
+    .chips { display: none; gap: 6px; margin-bottom: 8px; }
+    .chips.show { display: flex; }
+    .chips button { flex: 1; min-height: 44px; border-radius: 12px; color: var(--muted); background: transparent; }
+    .chips button.on { color: var(--fg); background: var(--bg); }
     .row { width: 100%; min-height: 44px; text-align: left; padding: 8px 4px; border-bottom: 1px solid #24302a; }
     .row b { display: block; font-size: 14px; }
     .row span { color: var(--muted); font-size: 12px; }
     #copy { background: #0c1612; border-radius: 12px; padding: 0 12px; }
+    #picked { color: var(--muted); font-size: 12px; min-height: 16px; margin: 0 0 8px; }
     @media (min-width: 800px) {
-      .sheet { top: 76px; bottom: 16px; left: 16px; right: auto; width: 340px; max-height: none; border-radius: 18px; }
+      .sheet { top: 76px; bottom: 16px; left: 16px; right: auto; width: 360px; max-height: none; border-radius: 18px; }
       .sheet .body { display: block; }
     }
   </style>
@@ -45,12 +50,18 @@
     <div class="body">
       <input id="q" placeholder="Search address or city" />
       <select id="state"><option value="all">All states</option></select>
+      <div class="chips" id="books">
+        <button type="button" data-book="yours" class="on">Your list</button>
+        <button type="button" data-book="state">State books</button>
+        <button type="button" data-book="all">Both</button>
+      </div>
+      <p id="picked"></p>
       <div id="list"></div>
     </div>
   </aside>
   <script src="https://unpkg.com/globe.gl@2.41.2/dist/globe.gl.min.js"></script>
   <script>
-    const AS_OF = "22 Oct 2026, 3:22 PM";
+    const AS_OF = "25 Oct 2026";
     const TABS = [
       ["all", "All", ""],
       ["hot", "Top leads", "#3dff9a"],
@@ -64,6 +75,7 @@
     let tab = "hot";
     let query = "";
     let state = "all";
+    let buyerBook = "yours";
     const globe = Globe()(document.getElementById("globe"))
       .backgroundColor("#05070a")
       .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-night.jpg")
@@ -73,8 +85,14 @@
       .atmosphereAltitude(0.2)
       .pointLat("lat").pointLng("lng").pointAltitude(0.012)
       .pointColor(d => COLOR[d.layer] || "#fff")
-      .pointRadius(d => d.layer === "signed" ? 0.32 : d.layer === "hot" ? 0.26 : d.layer === "investor" ? 0.18 : 0.14)
-      .pointLabel(d => `${d.title}<br>${d.city}, ${d.state}`)
+      .pointRadius(d => {
+        if (d.layer === "signed") return 0.32;
+        if (d.layer === "hot") return 0.26;
+        if (d.layer !== "investor") return 0.14;
+        const n = Number(String(d.value).replace(/[^0-9]/g, "")) || 1;
+        return Math.min(0.55, 0.12 + Math.log10(n + 1) * 0.16);
+      })
+      .pointLabel(d => `${d.title}<br>${d.city}, ${d.state}<br>${d.value}`)
       .ringColor(() => "#e6c36a")
       .ringMaxRadius(3.2)
       .ringPropagationSpeed(1.3)
@@ -83,12 +101,18 @@
     globe.controls().autoRotate = true;
     globe.controls().autoRotateSpeed = 0.38;
 
+    function countOf(m) { return Number(String(m.value).replace(/[^0-9]/g, "")) || 0; }
     function scoped() {
       const n = query.trim().toLowerCase();
       return book.filter(m => (state === "all" || m.state === state) && (!n || `${m.title} ${m.city} ${m.state} ${m.note} ${m.status} ${m.value}`.toLowerCase().includes(n)));
     }
+    function buyerMatch(m) {
+      if (tab !== "investor" || buyerBook === "all") return true;
+      return buyerBook === "yours" ? m.status === "Your list" : m.status !== "Your list";
+    }
     function visible() {
-      const rows = tab === "all" ? scoped() : scoped().filter(m => m.layer === tab);
+      const rows = (tab === "all" ? scoped() : scoped().filter(m => m.layer === tab)).filter(buyerMatch);
+      if (tab === "investor") return rows.slice().sort((a, b) => countOf(b) - countOf(a) || a.title.localeCompare(b.title));
       return rows.slice().sort((a, b) => a.title.localeCompare(b.title));
     }
     function paint() {
@@ -98,9 +122,12 @@
       document.getElementById("tabs").innerHTML = TABS.map(([id, label, color]) =>
         `<button type="button" class="${id === tab ? "on" : ""}" data-tab="${id}">${color ? `<i class="dot" style="background:${color}"></i>` : ""}${label} ${counts[id] || 0}</button>`
       ).join("");
-      document.getElementById("list").innerHTML = rows.slice(0, 400).map(m =>
-        `<button class="row" type="button" data-id="${m.id}"><b>${m.title}</b><span>${m.city}, ${m.state} · ${m.status}</span></button>`
-      ).join("") || `<p style="color:#8ea396">Nothing in this tab.</p>`;
+      document.getElementById("books").classList.toggle("show", tab === "investor");
+      document.querySelectorAll("#books button").forEach(b => b.classList.toggle("on", b.dataset.book === buyerBook));
+      const cap = tab === "investor" ? 250 : 200;
+      document.getElementById("list").innerHTML = rows.slice(0, cap).map(m =>
+        `<button class="row" type="button" data-id="${m.id}"><b>${m.title}</b><span>${m.city}, ${m.state} · ${m.value}</span></button>`
+      ).join("") || `<p style="color:#8ea396">Nothing in this view.</p>`;
       globe.pointsData(rows);
       globe.ringsData(rows.filter(m => m.layer === "signed"));
       const reach = scoped().filter(m => m.status === "Replied").length;
@@ -111,12 +138,17 @@
       const rows = scoped();
       const reach = rows.filter(m => m.status === "Replied");
       const tops = rows.filter(m => m.status === "Top lead");
-      const line = (m, i) => `${i}. ${m.title}, ${m.city}, ${m.state}${m.value && (m.value.startsWith("$") || /score/i.test(m.value)) ? " — " + m.value : ""}${m.note ? " — " + m.note : ""}`;
+      const line = (m, i) => `${i + 1}. ${m.title}, ${m.city}, ${m.state}${m.value && (String(m.value).startsWith("$") || /score/i.test(m.value)) ? " — " + m.value : ""}${m.note ? " — " + m.note : ""}`;
       return [
         "NEXUS ACQUISITIONS SCRIPT",
         "Book date: " + AS_OF,
         "You are the acquisitions desk for Nexus Management Solutions.",
         "Property facts only. Do not invent names, phones, emails, or prices.",
+        "",
+        "1. REQUEST FOR US TO REACH OUT — their latest text is newer than ours. Reply. One question only.",
+        "2. TOP LEADS — first text. Offer to look at the house. No fake offers.",
+        "",
+        "Output a numbered list. For each property: the address, then the exact text to send. Under 320 characters.",
         "",
         "REQUEST FOR US TO REACH OUT (" + reach.length + ")",
         reach.map(line).join("\n") || "(none)",
@@ -132,12 +164,19 @@
       tab = b.dataset.tab;
       paint();
     };
+    document.getElementById("books").onclick = (e) => {
+      const b = e.target.closest("[data-book]");
+      if (!b) return;
+      buyerBook = b.dataset.book;
+      paint();
+    };
     document.getElementById("list").onclick = (e) => {
       const b = e.target.closest("[data-id]");
       if (!b) return;
       const m = book.find(x => x.id === b.dataset.id);
       if (!m) return;
-      globe.pointOfView({ lat: m.lat, lng: m.lng, altitude: 0.6 }, 900);
+      document.getElementById("picked").textContent = m.note || "";
+      globe.pointOfView({ lat: m.lat, lng: m.lng, altitude: 0.55 }, 900);
       globe.controls().autoRotate = false;
     };
     document.getElementById("q").oninput = (e) => { query = e.target.value; paint(); };
@@ -145,16 +184,45 @@
     document.getElementById("toggle").onclick = () => document.getElementById("sheet").classList.toggle("open");
     document.getElementById("copy").onclick = async () => {
       const text = scriptText();
-      try { await navigator.clipboard.writeText(text); }
-      catch { const a = document.createElement("textarea"); a.value = text; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
-      document.getElementById("copy").textContent = "Copied";
+      let ok = false;
+      try { await navigator.clipboard.writeText(text); ok = true; }
+      catch {
+        const a = document.createElement("textarea");
+        a.value = text;
+        a.setAttribute("readonly", "true");
+        a.style.position = "fixed";
+        a.style.top = "0";
+        a.style.left = "0";
+        a.style.fontSize = "16px";
+        document.body.appendChild(a);
+        a.focus();
+        a.select();
+        try { a.setSelectionRange(0, a.value.length); } catch (err) {}
+        ok = document.execCommand("copy");
+        a.remove();
+      }
+      document.getElementById("copy").textContent = ok ? "Copied — paste it" : "Copy blocked by the browser";
     };
-    fetch("markers.json").then(r => r.json()).then(data => {
+    const SOURCES = ["markers.json?v=20261025", "https://chrisinvestor05.github.io/nexus-command-globe/markers.json?v=20261025"];
+    (async () => {
+      let data = null;
+      for (const url of SOURCES) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          data = await res.json();
+          if (Array.isArray(data) && data.length) break;
+        } catch (err) {}
+      }
+      if (!data) {
+        document.getElementById("copy").textContent = "Book failed to load";
+        return;
+      }
       book = data;
       const states = [...new Set(book.map(m => m.state))].sort();
       document.getElementById("state").insertAdjacentHTML("beforeend", states.map(s => `<option>${s}</option>`).join(""));
       paint();
-    });
+    })();
     addEventListener("resize", () => globe.width(innerWidth).height(innerHeight));
     globe.width(innerWidth).height(innerHeight);
   </script>
